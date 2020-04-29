@@ -516,14 +516,17 @@ let debug vl = debug_vars := List.fold_right EC.StrSet.add vl EC.StrSet.empty
 let bound_steps n =
   if n <= 0 then max_steps := default_max_step else max_steps := n
 
+type query =
+  | Ast of API.Ast.query
+  | Fun of (depth:int -> API.Conversion.ctx -> API.Data.constraints -> API.Data.state -> API.Data.state * (API.Ast.Loc.t * API.Data.term))
 
 let run ~tactic_mode ~static_check program_ast query =
   let elpi = ensure_initialized () in
   let program = EC.assemble ~elpi program_ast in
   let query =
     match query with
-    | `Ast query_ast -> EC.query program query_ast
-    | `Fun query_builder -> API.RawQuery.compile program query_builder in
+    | Ast query_ast -> EC.query program query_ast
+    | Fun query_builder -> API.RawQuery.compile program query_builder in
   API.Setup.trace [];
   if static_check then run_static_check query;
   API.Setup.trace !trace_options;
@@ -573,7 +576,7 @@ let run_and_print ~tactic_mode ~print ~static_check program_ast query_ast =
 let run_in_program ?(program = current_program ()) (loc, query) =
   let _ = ensure_initialized () in
   let program_ast = get program in
-  let query_ast = `Ast (parse_goal loc query) in
+  let query_ast = Ast (parse_goal loc query) in
   run_and_print ~tactic_mode:false ~print:true ~static_check:true program_ast query_ast
 ;;
 
@@ -607,15 +610,15 @@ let run_program loc name ~atts args =
     |> List.map (interp_arg (Ltac_plugin.Tacinterp.default_ist ()) Evd.({ sigma = from_env (Global.env()); it = 0 }))
     |> List.map snd in
   let args = args |> List.map to_arg in
-  let query ~depth state =
-    let state, atts, _ = EU.map_acc (Coq_elpi_builtins.attribute.API.Conversion.embed ~depth) state atts in
+  let query ~depth hyps cst state =
+    let state, atts, _ = EU.map_acc (Coq_elpi_builtins.attribute.API.Conversion.embed ~depth hyps cst) state atts in
     let state, args = CList.fold_left_map
       (Coq_elpi_goal_HOAS.in_elpi_global_arg ~depth (Coq_elpi_HOAS.mk_coq_context state))
       state args in
     let atts = ET.mkApp attributesc (EU.list_to_lp_list atts) [] in
     state, (Coq_elpi_utils.of_coq_loc loc, ET.mkApp ET.Constants.implc atts [ET.mkApp mainc (EU.list_to_lp_list args) []]) in
   let program_ast = get name in
-  run_and_print ~tactic_mode:false ~print:false ~static_check:false program_ast (`Fun query)
+  run_and_print ~tactic_mode:false ~print:false ~static_check:false program_ast (Fun query)
 ;;
 
 let mk_trace_opts start stop preds =
@@ -656,7 +659,7 @@ let print name args =
     source_stop = 0;
     line = -1;
     line_starts_at = 0; } in
-  let q ~depth state =
+  let q ~depth hyps csts state =
     let state, quotedP, _  = API.Quotation.quote_syntax_compiletime state query in
     assert(depth=0); (* else, we should lift the terms down here *)
     let q = ET.mkApp main_quotedc

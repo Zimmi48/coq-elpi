@@ -72,7 +72,7 @@ val embed_goal : depth:int -> State.t -> Evar.t -> State.t * term * Conversion.e
 
 (* *** Low level API to reuse parts of the embedding *********************** *)
 type 'a unspec = Given of 'a | Unspec
-val unspec : 'a Conversion.t -> 'a unspec Conversion.t
+val unspec : ('a, 'c) Conversion.t -> ('a unspec, 'c) Conversion.t
 val unspec2opt : 'a unspec -> 'a option
 val opt2unspec : 'a option -> 'a unspec
 
@@ -95,13 +95,13 @@ val is_coq_name : depth:int -> term -> bool
 val in_elpi_app_Arg : depth:int -> term -> term list -> term
 
 type global_constant = Variable of Names.Id.t  | Constant of Names.Constant.t
-val gref : Names.GlobRef.t Conversion.t
-val inductive : inductive Conversion.t
-val constructor : constructor Conversion.t
-val constant : global_constant Conversion.t
-val universe : Sorts.t Conversion.t
+val gref : (Names.GlobRef.t,'c) Conversion.t
+val inductive : (inductive,'c) Conversion.t
+val constructor : (constructor,'c) Conversion.t
+val constant : (global_constant,'c) Conversion.t
+val universe : (Sorts.t,'c) Conversion.t
 val global_constant_of_globref : Names.GlobRef.t -> global_constant
-val abbreviation : Globnames.syndef_name Conversion.t
+val abbreviation : (Globnames.syndef_name,'c) Conversion.t
 
 module GRMap : Elpi.API.Utils.Map.S with type key = Names.GlobRef.t
 module GRSet : Elpi.API.Utils.Set.S with type elt = Names.GlobRef.t
@@ -110,7 +110,7 @@ module GRSet : Elpi.API.Utils.Set.S with type elt = Names.GlobRef.t
 val isuniv : RawOpaqueData.t -> bool
 val univout : RawOpaqueData.t -> Univ.Universe.t
 val univin : Univ.Universe.t -> RawOpaqueData.t
-val univ : Univ.Universe.t Conversion.t
+val univ : (Univ.Universe.t,'c) Conversion.t
 
 val is_sort : depth:int -> term -> bool
 val is_prod : depth:int -> term -> bool
@@ -118,14 +118,14 @@ val is_lam : depth:int -> term -> (term * term) option (* ty, bo @ depth+1 *)
 
 val isname : RawOpaqueData.t -> bool
 val nameout : RawOpaqueData.t -> Name.t
-val name : Name.t Conversion.t
+val name : (Name.t,'c) Conversion.t
 
 val in_elpi_modpath : ty:bool -> Names.ModPath.t -> term
 val is_modpath : depth:int -> term -> bool
 val is_modtypath : depth:int -> term -> bool
 val in_coq_modpath : depth:int -> term -> Names.ModPath.t
-val modpath : Names.ModPath.t Conversion.t
-val modtypath : Names.ModPath.t Conversion.t
+val modpath : (Names.ModPath.t,'c) Conversion.t
+val modtypath : (Names.ModPath.t,'c)Conversion.t
 
 val in_elpi_module : depth:int -> State.t -> Declarations.module_body -> GlobRef.t list
 val in_elpi_module_type : Declarations.module_type_body -> string list
@@ -133,7 +133,7 @@ val in_elpi_module_type : Declarations.module_type_body -> string list
 type record_field_att =
   | Coercion of bool
   | Canonical of bool
-val record_field_att : record_field_att Conversion.t
+val record_field_att : (record_field_att,'c) Conversion.t
 
 val new_univ : State.t -> State.t * Univ.Universe.t
 val add_constraints : State.t -> UnivProblem.Set.t -> State.t
@@ -167,7 +167,7 @@ val goal2query : Environ.env ->
            hyp list ->
            Evd.evar_map ->
            State.t ->
-           'a -> State.t * term) -> depth:int -> 
+           'a -> State.t * term) -> depth:int -> Elpi.API.Data.hyps -> Elpi.API.Data.constraints ->
   State.t -> State.t * (Elpi.API.Ast.Loc.t * term)
 val tclSOLUTION2EVD : 'a Elpi.API.Data.solution -> unit Proofview.tactic
 

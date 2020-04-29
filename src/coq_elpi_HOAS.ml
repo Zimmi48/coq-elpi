@@ -1222,7 +1222,7 @@ let embed_goal ~depth state k =
               coq_ctx hyps ~calldepth ~depth state in
          state, in_elpi_goal ?goal_name ~hyps ~raw_ev ~ty:goal_ty, gls)
 
-let goal2query env sigma goal loc ?main args ~in_elpi_arg ~depth:calldepth state =
+let goal2query env sigma goal loc ?main args ~in_elpi_arg ~depth:calldepth hyps csts state =
   if not (Evd.is_undefined sigma goal) then
     err Pp.(str (Printf.sprintf "Evar %d is not a goal" (Evar.repr goal)));
 
