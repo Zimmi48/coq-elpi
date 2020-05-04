@@ -83,7 +83,7 @@ let option_map_acc f s = function
   | Some x ->
       let s, x = f s x in
       s, Some x
-let in_option = Elpi.(Builtin.option API.BuiltInData.any).API.Conversion.embed
+let in_option ~depth st x = Elpi.(Builtin.option API.BuiltInData.any).API.Conversion.embed ~depth (new API.Conversion.ctx []) E.no_constraints st x
 
 let cdecl2lp ~depth sigma state ist { name; typ; body } =
   let open Coq_elpi_glob_quotation in

@@ -3,12 +3,15 @@
 (* ------------------------------------------------------------------------- *)
 
 module API = Elpi.API
+module ED = API.Data
 module E  = API.RawData
 module CD = API.RawOpaqueData
+module OD = API.OpaqueData
 module U  = API.Utils
 module P  = API.RawPp
 module S  = API.State
 module F = API.FlexibleData
+module CC = API.Conversion
 
 module C = Constr
 module EC = EConstr
@@ -26,19 +29,22 @@ let debug () = !Flags.debug
 (* {{{ CData ************************************************************** *)
 
 (* names *)
-let namein, isname, nameout, name =
-  let { CD.cin; isc; cout }, name  = CD.declare {
-    CD.name = "name";
-    doc = "Name.Name.t: Name hints (in binders), can be input writing a name between backticks, e.g. `x` or `_` for anonymous. Important: these are just printing hints with no meaning, hence in elpi two name are always related: `x` = `y`";
+  let ty, pp, pp_doc, name  = OD.declare {
+    OD.name = "name";
+    cname = "Names.Name.t";
+    doc = "Name hints (in binders), can be input writing a name between backticks, e.g. `x` or `_` for anonymous. Important: these are just printing hints with no meaning, hence in elpi two name are always related: `x` = `y`";
     pp = (fun fmt x ->
       Format.fprintf fmt "`%s`" (Pp.string_of_ppcmds (Name.print x)));
-    compare = (fun _ _ -> 0);
+    compare = (fun _ _ -> 0); (* singleton type *)
     hash = (fun _ -> 0);
     hconsed = false;
     constants = [];
-  } in
-  cin, isc, cout, name
-;;
+  }
+let { CD.cin = namein ; isc = isname; cout = nameout } = CD.cdata name
+let name : 'c. (Names.Name.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed name ~depth);
+  readback = (fun ~depth -> OD.readback name ~depth);
+}
 let in_elpi_name x = E.mkCData (namein x)
 
 let is_coq_name ~depth t =
@@ -109,24 +115,27 @@ let in_coq_fresh_annot ~depth ~coq_ctx dbl t =
   Context.make_annot (in_coq_fresh_name ~depth ~coq_ctx dbl t) Sorts.Relevant
 
 (* universes *)
-let univin, isuniv, univout, univ_to_be_patched =
-  let { CD.cin; isc; cout }, univ = CD.declare {
-    CD.name = "univ";
-    doc = "Univ.Universe.t";
-    pp = (fun fmt x ->
-      let s = Pp.string_of_ppcmds (Univ.Universe.pr x) in
-      let l = string_split_on_char '.' s in
-      let s = match List.rev l with
-        | x :: y :: _ -> y ^ "." ^ x
-        | _ -> s in
-      Format.fprintf fmt "«%s»" s);
-    compare = Univ.Universe.compare;
-    hash = Univ.Universe.hash;
-    hconsed = false;
-    constants = [];
-  } in
-  cin, isc, cout, univ
-;;
+let ty, pp, pp_doc, univ = OD.declare {
+  OD.name = "univ";
+  cname = "Univ.Universe.t";
+  doc = "Univ.Universe.t";
+  pp = (fun fmt x ->
+    let s = Pp.string_of_ppcmds (Univ.Universe.pr x) in
+    let l = string_split_on_char '.' s in
+    let s = match List.rev l with
+      | x :: y :: _ -> y ^ "." ^ x
+      | _ -> s in
+    Format.fprintf fmt "«%s»" s);
+  compare = Univ.Universe.compare;
+  hash = Univ.Universe.hash;
+  hconsed = false;
+  constants = [];
+}
+let { CD.cin = univin; isc = isuniv; cout = univout } = CD.cdata univ
+let univ_to_be_patched : 'c. (Univ.Universe.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed univ ~depth);
+  readback = (fun ~depth -> OD.readback univ ~depth);
+}
 
 (* constants *)
 
@@ -145,42 +154,59 @@ let global_constant_of_globref = function
   | GlobRef.ConstRef x -> Constant x
   | x -> CErrors.anomaly Pp.(str"not a global constant: " ++ (Printer.pr_global x))
 
-let constant, inductive, constructor = 
-  let open API.OpaqueData in
-  declare {
-    name = "constant";
-    doc = "Global constant name";
-    pp = (fun fmt x ->
-      let x = match x with
-        | Variable x -> GlobRef.VarRef x
-        | Constant c -> GlobRef.ConstRef c in
-      Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global x)));
-    compare = compare_global_constant;
-    hash = hash_global_constant;
-    hconsed = false;
-    constants = [];
-  },
-  declare {
-    name = "inductive";
-    doc = "Inductive type name";
-    pp = (fun fmt x -> Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global (GlobRef.IndRef x))));
-    compare = Names.ind_ord;
-    hash = Names.ind_hash;
-    hconsed = false;
-    constants = [];
-  },
-  declare {
-    name = "constructor";
-    doc = "Inductive constructor name";
-    pp = (fun fmt x -> Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global (GlobRef.ConstructRef x))));
-    compare = Names.constructor_ord;
-    hash = Names.constructor_hash;
-    hconsed = false;
-    constants = [];
-  }
-;;
 
-let gref =
+
+
+let ty, pp, pp_doc, constant = OD.declare {
+  OD.name = "constant";
+  cname = "Names.Constant.t";
+  doc = "Global constant name";
+  pp = (fun fmt x ->
+    let x = match x with
+      | Variable x -> GlobRef.VarRef x
+      | Constant c -> GlobRef.ConstRef c in
+    Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global x)));
+  compare = compare_global_constant;
+  hash = hash_global_constant;
+  hconsed = false;
+  constants = [];
+}
+let constant : 'c. (global_constant, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+   embed = (fun ~depth -> OD.embed constant ~depth);
+  readback = (fun ~depth -> OD.readback constant ~depth);
+}
+
+let ty, pp, pp_doc, inductive = OD.declare {
+  OD.name = "inductive";
+  cname = "Names.inductive";
+  doc = "Inductive type name";
+  pp = (fun fmt x -> Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global (GlobRef.IndRef x))));
+  compare = Names.ind_ord;
+  hash = Names.ind_hash;
+  hconsed = false;
+  constants = [];
+}
+let inductive : 'c. (Names.inductive, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+   embed = (fun ~depth -> OD.embed inductive ~depth);
+  readback = (fun ~depth -> OD.readback inductive ~depth);
+}
+
+let ty, pp, pp_doc, constructor = OD.declare {
+  OD.name = "constructor";
+  cname = "Names.constructor";
+  doc = "Inductive constructor name";
+  pp = (fun fmt x -> Format.fprintf fmt "«%s»" (Pp.string_of_ppcmds (Printer.pr_global (GlobRef.ConstructRef x))));
+  compare = Names.constructor_ord;
+  hash = Names.constructor_hash;
+  hconsed = false;
+  constants = [];
+}
+let constructor : 'c. (Names.constructor, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed constructor ~depth);
+  readback = (fun ~depth -> OD.readback constructor ~depth);
+}
+
+let { CC.ty; pp; pp_doc; embed; readback } =
   let open GlobRef in
   let open API.AlgebraicData in declare {
     ty = API.Conversion.TyName "gref";
@@ -201,19 +227,26 @@ let gref =
           B (fun c -> ConstructRef c),
           M (fun ~ok ~ko -> function ConstructRef c -> ok c | _ -> ko ()));
     ]
-} |> API.ContextualConversion.(!<)
+}
+let gref : 'c. (Names.GlobRef.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth (c : #CC.ctx) -> embed ~depth (c :> CC.ctx));
+  readback = (fun ~depth (c : #CC.ctx) -> readback ~depth (c :> CC.ctx));
+}
 
-let abbreviation =
-  let open API.OpaqueData in
-  declare {
-    name = "abbreviation";
-    doc = "Name of an abbreviation";
-    pp = (fun fmt x -> Format.fprintf fmt "«%s»" (KerName.to_string x));
-    compare = KerName.compare;
-    hash = KerName.hash;
-    hconsed = false;
-    constants = [];
-  }
+let ty, pp, pp_doc, abbreviation = OD.declare {
+  OD.name = "abbreviation";
+  cname = "Globnames.syndef_name";
+  doc = "Name of an abbreviation";
+  pp = (fun fmt x -> Format.fprintf fmt "«%s»" (KerName.to_string x));
+  compare = KerName.compare;
+  hash = KerName.hash;
+  hconsed = false;
+  constants = [];
+}
+let abbreviation : 'c. (KerName.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed abbreviation ~depth);
+  readback = (fun ~depth -> OD.readback abbreviation ~depth);
+}
 
 module GROrd = struct
   include Names.GlobRef.Ordered
@@ -226,41 +259,48 @@ module GRSet = U.Set.Make(GROrd)
 let globalc  = E.Constants.declare_global_symbol "global"
 
 let in_elpi_gr ~depth s r =
-  let s, t, gl = gref.API.Conversion.embed ~depth s r in
+  let s, t, gl = gref.CC.embed ~depth (new CC.ctx []) E.no_constraints s r in
   assert (gl = []);
   E.mkApp globalc t []
 
 let in_coq_gref ~depth s t =
-  let s, t, gls = gref.API.Conversion.readback ~depth s t in
+  let s, t, gls = gref.CC.readback ~depth (new CC.ctx []) E.no_constraints s t in
   assert(gls = []);
   s, t
 
-let mpin, ismp, mpout, modpath =
-  let { CD.cin; isc; cout }, x = CD.declare {
-    CD.name = "modpath";
-    doc = "Name of a module /*E*/";
-    pp = (fun fmt x ->
-            Format.fprintf fmt "«%s»" (Names.ModPath.to_string x));
-    compare = Names.ModPath.compare;
-    hash = Names.ModPath.hash;
-    hconsed = false;
-    constants = [];
-  } in
-  cin, isc, cout, x
-;;
-let mptyin, istymp, mptyout, modtypath =
-  let { CD.cin; isc; cout }, x = CD.declare {
-    CD.name = "modtypath";
-    doc = "Name of a module type /*E*/";
-    pp = (fun fmt x ->
-            Format.fprintf fmt "«%s»" (Names.ModPath.to_string x));
-    compare = Names.ModPath.compare;
-    hash = Names.ModPath.hash;
-    hconsed = false;
-    constants =[];
-  } in
-  cin, isc, cout, x
-;;
+let ty, pp, pp_doc, modpath = OD.declare {
+  OD.name = "modpath";
+  cname = "Names.ModPath.t";
+  doc = "Name of a module /*E*/";
+  pp = (fun fmt x ->
+          Format.fprintf fmt "«%s»" (Names.ModPath.to_string x));
+  compare = Names.ModPath.compare;
+  hash = Names.ModPath.hash;
+  hconsed = false;
+  constants = [];
+}
+let { CD.cin = mpin; isc = ismp; cout = mpout } = CD.cdata modpath
+let modpath : 'c. (Names.ModPath.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed modpath ~depth);
+  readback = (fun ~depth -> OD.readback modpath ~depth);
+}
+
+let ty, pp, pp_doc, modtypath = OD.declare {
+  OD.name = "modtypath";
+  cname = "Names.ModPath.t";
+  doc = "Name of a module type /*E*/";
+  pp = (fun fmt x ->
+          Format.fprintf fmt "«%s»" (Names.ModPath.to_string x));
+  compare = Names.ModPath.compare;
+  hash = Names.ModPath.hash;
+  hconsed = false;
+  constants =[];
+}
+let { CD.cin = mptyin; isc = istymp; cout = mptyout } = CD.cdata modtypath
+let modtypath : 'c. (Names.ModPath.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth -> OD.embed modtypath ~depth);
+  readback = (fun ~depth -> OD.readback modtypath ~depth);
+}
 
 let in_elpi_modpath ~ty mp = E.mkCData (if ty then mptyin mp else mpin mp)
 let is_modpath ~depth t =
@@ -438,7 +478,7 @@ let new_univ state =
 let univ =
   (* turn UVars into fresh universes *)
   { univ_to_be_patched with
-  API.Conversion.readback = begin fun ~depth state t ->
+  CC.readback = begin fun ~depth h c state t ->
     match E.look ~depth t with
     | E.UnifVar (b,args) ->
        let m = S.get um state in
@@ -451,13 +491,13 @@ let univ =
          state, u, [ E.mkApp E.Constants.eqc (E.mkUnifVar b ~args state) [E.mkCData (univin u)]]
        end
     | _ ->
-       univ_to_be_patched.API.Conversion.readback ~depth state t
+       univ_to_be_patched.CC.readback ~depth h c state t
   end
 }
 
-let universe =
+let { CC.ty; pp; pp_doc; embed; readback } =
   let open API.AlgebraicData in  declare {
-  ty = API.Conversion.TyName "universe";
+  ty = CC.TyName "universe";
   doc = "Universes (for the sort term former)";
   pp = (fun fmt -> function
     | Sorts.Type _ -> Format.fprintf fmt "Type"
@@ -478,7 +518,12 @@ let universe =
         | Sorts.Set -> ok Univ.type0_univ
         | _ -> ko ()));
   ]
-} |> API.ContextualConversion.(!<)
+}
+let universe : 'c. (Sorts.t, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth (c : #CC.ctx) -> embed ~depth (c :> CC.ctx));
+  readback = (fun ~depth (c : #CC.ctx) -> readback ~depth (c :> CC.ctx));
+}
+let in_coq_universe ~depth st x = universe.CC.readback ~depth (new CC.ctx []) E.no_constraints st x
 
 let sortc  = E.Constants.declare_global_symbol "sort"
 let propc  = E.Constants.declare_global_symbol "prop"
@@ -809,7 +854,7 @@ let is_lam ~depth x =
 
 let pp_cst fmt { E.goal = (depth,concl); context } =
   Format.fprintf fmt "%d |> %a |- %a" depth
-    (P.list (fun fmt { E.hdepth; E.hsrc } ->
+    (P.list (fun fmt { ED.hdepth; hsrc } ->
         Format.fprintf fmt "%d:%a" hdepth (P.term hdepth) hsrc) ", ")
       context
      (P.term depth) concl
@@ -822,13 +867,13 @@ let find_evar var csts =
         | E.UnifVar(raw,args), E.UnifVar(r,_) when F.Elpi.(equal raw var || equal r var) ->
           if debug () then
             Feedback.msg_debug Pp.(str"lp2term: evar: found relevant constraint: " ++
-              str(pp2string pp_cst cst)); 
+              str(pp2string pp_cst cst));
           Some r
         | _ -> None end
-    | _ -> None) 
+    | _ -> None)
 
 let preprocess_context visible context =
-  let select_ctx_entries visible { E.hdepth = depth; E.hsrc = t } =
+  let select_ctx_entries visible { ED.hdepth = depth; hsrc = t } =
     let isVisibleConst t = match E.look ~depth t with E.Const i -> visible i | _ -> false in
     let destConst t = match E.look ~depth t with E.Const x -> x | _ -> assert false in
     match E.look ~depth t with
@@ -837,7 +882,7 @@ let preprocess_context visible context =
     | E.App(c,v,[name;ty;bo]) when c == defc && isVisibleConst v ->
        Some (destConst v, depth, `Def (name,ty,bo))
     | _ ->
-        if debug () then            
+        if debug () then
           Feedback.msg_debug Pp.(str "skip entry" ++
             str(pp2string (P.term depth) t));
         None
@@ -922,12 +967,12 @@ and lp2constr ~calldepth syntactic_constraints coq_ctx ~depth state ?(on_ty=fals
   | _ -> err Pp.(str"HOAS: expecting a lambda, got: " ++
            str(pp2string (P.term depth) t)) in
   if debug () then
-    Feedback.msg_debug 
+    Feedback.msg_debug
       Pp.(str"lp2term@" ++ int depth ++ str":" ++
            str(pp2string (P.term depth) t));
   match E.look ~depth t with
   | E.App(s,p,[]) when sortc == s ->
-      let state, u, gsl = universe.API.Conversion.readback ~depth state p in
+      let state, u, gsl = in_coq_universe ~depth state p in
       if debug () then Feedback.msg_debug Pp.(str "xxxxx:" ++ Termops.pr_evar_map None (Global.env()) (get_sigma state));
       state, EC.mkSort u, gsl
  (* constants *)
@@ -1157,6 +1202,27 @@ let lp2constr syntactic_constraints coq_ctx ~depth state t =
         spc () ++ str "elpi2coq:" ++ cut () ++ str(UVMap.show (S.get UVMap.uvmap state)) ++ Termops.pr_evar_map None (Global.env()) (get_sigma state));
     state, t, gls
 
+type coq_context_item = { dBindex : int; decl : (EC.t, EC.t) Context.Rel.Declaration.pt }
+
+let is_entry_for_nominal : hyp -> constant option =
+let to_key : depth:int -> 'a -> 'k =
+let push : depth:int -> State.t -> 'k -> 'a ctx_entry -> State.t =
+let pop : depth:int -> State.t -> 'k -> State.t =
+let conv : (constant * 'a, #ctx as 'h) t =
+let init : State.t -> State.t =
+let get : State.t -> 'a ctx_field =
+
+let coq_context : (coq_context_item,int,CC.ctx) CC.context = {
+  CC.conv = coq_context_item;
+  is_entry_for_nominal;
+  to_key;
+  push;
+  pop;
+  conv;
+  init;
+  get;
+}
+
 (* ********************************* }}} ********************************** *)
 
 let push_env state name =
@@ -1267,7 +1333,7 @@ let goal2query env sigma goal loc ?main args ~in_elpi_arg ~depth:calldepth hyps 
     Feedback.msg_debug Pp.(str"engine: " ++
       str (show_coq_engine (S.get engine state)));
 
-  state, (loc, evarmap_query)
+  state, (loc, evarmap_query), (fun _ _ _ -> ())
 ;;
 
 let eat_n_lambdas ~depth t upto state =
@@ -1339,10 +1405,10 @@ let elpi_solution_to_coq_solution syntactic_constraints state =
 
             (* These meta-level-lambdas are elpi specific, they don't exist in Coq *)
             let t = eat_n_lambdas ~depth:0 t coq_ctx.proof_len state in
-               
+
             let state, solution, gls = lp2constr
               syntactic_constraints coq_ctx ~depth state t in
-            
+
            spilled_solution := solution;
            state, E.mkNil (* dummy *), gls)
        in
@@ -1502,7 +1568,7 @@ type 'a unspec = Given of 'a | Unspec
 let unspec2opt = function Given x -> Some x | Unspec -> None
 let opt2unspec = function Some x -> Given x | None -> Unspec
 
-let unspecC data = let open API.ContextualConversion in {
+let unspec data = let open CC in {
   ty = data.ty;
   pp_doc = data.pp_doc;
   pp = (fun fmt -> function
@@ -1518,13 +1584,12 @@ let unspecC data = let open API.ContextualConversion in {
         let state, x, gls = data.readback ~depth hyps constraints state (E.kool t) in
         state, Given x, gls)
 }
-let unspec d = API.ContextualConversion.(!<(unspecC (!> d)))
 
 type record_field_att =
   | Coercion of bool
   | Canonical of bool
 
-let record_field_att = let open API.Conversion in let open API.AlgebraicData in let open Elpi.Builtin in declare {
+let { CC.ty; pp; pp_doc; embed; readback } = let open CC in let open API.AlgebraicData in let open API.BuiltInData  in declare {
   ty = TyName "field-attribute";
   doc = "Attributes for a record field. Can be left unspecified, see defaults below.";
   pp = (fun fmt _ -> Format.fprintf fmt "<todo>");
@@ -1536,7 +1601,11 @@ let record_field_att = let open API.Conversion in let open API.AlgebraicData in 
         B (fun x -> Canonical(x)),
         M (fun ~ok ~ko -> function Canonical x -> ok (x) | _ -> ko ()));
   ]
-} |> API.ContextualConversion.(!<)
+}
+let record_field_att : 'c. (record_field_att, #CC.ctx as 'c) CC.t = { CC.ty; pp; pp_doc;
+  embed = (fun ~depth (c : #CC.ctx) -> embed ~depth (c :> CC.ctx));
+  readback = (fun ~depth (c : #CC.ctx) -> readback ~depth (c :> CC.ctx));
+}
 
 let record_field_attributes = unspec (API.BuiltInData.list record_field_att)
 
@@ -1572,7 +1641,7 @@ let in_elpi_id = function
   | Names.Name.Anonymous -> CD.of_string "_"
 
 let in_elpi_bool state b =
-  let _, b, _ = Elpi.Builtin.bool.API.Conversion.embed ~depth:0 state b in
+  let _, b, _ = API.BuiltInData.bool.CC.embed ~depth:0 (new CC.ctx []) API.RawData.no_constraints state b in
   b
 
 let in_elpi_indtdecl_parameter id ty rest =
@@ -1584,8 +1653,8 @@ let in_elpi_indtdecl_endrecord () =
 
 type record_field_spec = { name : Name.t; is_coercion : bool; is_canonical : bool }
 let in_elpi_indtdecl_field ~depth s { name; is_coercion; is_canonical } ty rest =
-  let open API.Conversion in
-  let s, att, gl = record_field_attributes.embed ~depth s (Given [Coercion is_coercion; Canonical is_canonical]) in
+  let open CC in
+  let s, att, gl = record_field_attributes.embed ~depth (new CC.ctx []) API.RawData.no_constraints s (Given [Coercion is_coercion; Canonical is_canonical]) in
   assert(gl = []);
   s, E.mkApp fieldc att [in_elpi_id name;ty;E.mkLam rest], gl
 
@@ -1763,7 +1832,7 @@ let lp2inductive_entry ~depth coq_ctx constraints state t =
       | E.Lam fields ->
         let state, fs, tf = aux_fields (depth+1) state ind fields in
         let name = in_coq_name ~depth n in
-        let state, atts, gls = record_field_attributes.API.Conversion.readback ~depth state atts in
+        let state, atts, gls = record_field_attributes.CC.readback ~depth (new CC.ctx []) API.RawData.no_constraints state atts in
         assert(gls = []);
         state, { name; is_coercion = is_coercion_att atts; is_canonical = is_canonical_att atts } :: fs,
           in_elpi_prod (in_coq_name ~depth n) ty tf
@@ -1852,7 +1921,7 @@ let get_current_env_sigma ~depth hyps constraints state =
 (* TODO: cahe longer env in coq_engine for later reuse, use == on hyps+depth? *)
   let state, _, changed, gl1 = elpi_solution_to_coq_solution constraints state in
   let state, coq_ctx, gl2 =
-    of_elpi_ctx ~calldepth:depth constraints depth (preprocess_context (fun _ -> true) (E.of_hyps hyps)) state in
+    of_elpi_ctx ~calldepth:depth constraints depth (preprocess_context (fun _ -> true) hyps) state in
   state, coq_ctx, get_sigma state, gl1 @ gl2
 ;;
 
@@ -1871,7 +1940,7 @@ let constr2lp_closed ~depth constraints state t =
 let lp2constr_closed_ground ~depth state t =
   let state, t1, _ as res = lp2constr ~depth (mk_coq_context state) E.no_constraints state t in
   if not (Evarutil.is_ground_term (get_sigma state) t1) then
-    raise API.Conversion.(TypeErr(TyName"closed_term",depth,t));
+    raise CC.(TypeErr(TyName"closed_term",depth,t));
   res
 
 let constr2lp_closed_ground ~depth state t =

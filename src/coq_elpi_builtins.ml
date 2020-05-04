@@ -7,12 +7,10 @@ module E = API.RawData
 module State = API.State
 module P = API.RawPp
 module Conv = API.Conversion
-module CConv = API.ContextualConversion
 module B = struct
   include API.BuiltInData
   include Elpi.Builtin
   let ioarg = API.BuiltInPredicate.ioarg
-  let ioargC = API.BuiltInPredicate.ioargC
 end
 module Pred = API.BuiltInPredicate
 
@@ -152,7 +150,7 @@ let clauses_for_later =
 ;;
 
 let term = {
-  CConv.ty = Conv.TyName "term";
+  Conv.ty = Conv.TyName "term";
   pp_doc = (fun fmt () -> Format.fprintf fmt "A Coq term containing evars");
   pp = (fun fmt t -> Format.fprintf fmt "%s" (Pp.string_of_ppcmds (Printer.pr_econstr_env (Global.env()) Evd.empty t)));
   readback = lp2constr;

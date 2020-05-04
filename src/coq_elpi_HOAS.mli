@@ -161,14 +161,9 @@ val get_sigma : State.t -> Evd.evar_map
 type hyp = { ctx_entry : term; depth : int }
 
 val goal2query : Environ.env ->
-  Evd.evar_map -> Goal.goal -> Elpi.API.Ast.Loc.t -> ?main:string -> 'a list -> 
-      in_elpi_arg:(depth:int ->
-           coq_context ->
-           hyp list ->
-           Evd.evar_map ->
-           State.t ->
-           'a -> State.t * term) -> depth:int -> Elpi.API.Data.hyps -> Elpi.API.Data.constraints ->
-  State.t -> State.t * (Elpi.API.Ast.Loc.t * term)
+  Evd.evar_map -> Goal.goal -> Elpi.API.Ast.Loc.t -> ?main:string -> 'a list ->
+  in_elpi_arg:(depth:int -> coq_context -> hyp list -> Evd.evar_map -> State.t -> 'a -> State.t * term) ->
+  depth:int -> Elpi.API.Data.hyps -> Elpi.API.Data.constraints -> State.t -> State.t * (Elpi.API.Ast.Loc.t * term) * unit Elpi.API.RawQuery.query_readback
 val tclSOLUTION2EVD : 'a Elpi.API.Data.solution -> unit Proofview.tactic
 
 val show_engine : State.t -> string

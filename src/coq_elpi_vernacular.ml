@@ -518,7 +518,7 @@ let bound_steps n =
 
 type query =
   | Ast of API.Ast.query
-  | Fun of (depth:int -> API.Conversion.ctx -> API.Data.constraints -> API.Data.state -> API.Data.state * (API.Ast.Loc.t * API.Data.term))
+  | Fun of (depth:int -> API.Data.hyps -> API.Data.constraints -> API.Data.state -> API.Data.state * (API.Ast.Loc.t * API.Data.term) * unit API.RawQuery.query_readback)
 
 let run ~tactic_mode ~static_check program_ast query =
   let elpi = ensure_initialized () in
@@ -611,12 +611,13 @@ let run_program loc name ~atts args =
     |> List.map snd in
   let args = args |> List.map to_arg in
   let query ~depth hyps cst state =
-    let state, atts, _ = EU.map_acc (Coq_elpi_builtins.attribute.API.Conversion.embed ~depth hyps cst) state atts in
+    let ctx = new API.Conversion.ctx hyps in
+    let state, atts, _ = EU.map_acc (Coq_elpi_builtins.attribute.API.Conversion.embed ~depth ctx cst) state atts in
     let state, args = CList.fold_left_map
       (Coq_elpi_goal_HOAS.in_elpi_global_arg ~depth (Coq_elpi_HOAS.mk_coq_context state))
       state args in
     let atts = ET.mkApp attributesc (EU.list_to_lp_list atts) [] in
-    state, (Coq_elpi_utils.of_coq_loc loc, ET.mkApp ET.Constants.implc atts [ET.mkApp mainc (EU.list_to_lp_list args) []]) in
+    state, (Coq_elpi_utils.of_coq_loc loc, ET.mkApp ET.Constants.implc atts [ET.mkApp mainc (EU.list_to_lp_list args) []]), (fun _ _ _ -> ()) in
   let program_ast = get name in
   run_and_print ~tactic_mode:false ~print:false ~static_check:false program_ast (Fun query)
 ;;
@@ -665,8 +666,8 @@ let print name args =
     let q = ET.mkApp main_quotedc
       (EU.list_to_lp_list quotedP)
       [API.RawOpaqueData.of_string fname; EU.list_to_lp_list args] in
-    state, (loc,q) in
-  run_and_print ~tactic_mode:false ~print:false ~static_check:false [printer ()] (`Fun q)
+    state, (loc,q), (fun _ _ _ -> ()) in
+  run_and_print ~tactic_mode:false ~print:false ~static_check:false [printer ()] (Fun q)
 ;;
 
 open Proofview
@@ -676,10 +677,10 @@ let run_tactic loc program ist args =
   let args = List.map to_arg args in
   let loc = Coq_elpi_utils.of_coq_loc loc in
   Goal.enter begin fun gl ->
-  tclBIND tclEVARMAP begin fun sigma -> 
-  tclBIND tclENV begin fun env -> 
+  tclBIND tclEVARMAP begin fun sigma ->
+  tclBIND tclENV begin fun env ->
   let k = Goal.goal gl in
-  let query = `Fun (Coq_elpi_HOAS.goal2query env sigma k loc ?main:None args ~in_elpi_arg:Coq_elpi_goal_HOAS.in_elpi_arg) in
+  let query = Fun (Coq_elpi_HOAS.goal2query env sigma k loc ?main:None args ~in_elpi_arg:Coq_elpi_goal_HOAS.in_elpi_arg) in
   let program_ast = get program in
   match run ~tactic_mode:true ~static_check:false program_ast query with
   | API.Execute.Success solution ->
@@ -692,9 +693,9 @@ let run_in_tactic ?(program = current_program ()) (loc,query) ist args =
   let args = List.map to_arg args in
   Goal.enter begin fun gl ->
   tclBIND tclEVARMAP begin fun sigma ->
-  tclBIND tclENV begin fun env -> 
+  tclBIND tclENV begin fun env ->
   let k = Goal.goal gl in
-  let query = `Fun (Coq_elpi_HOAS.goal2query env ~main:query sigma k loc args ~in_elpi_arg:Coq_elpi_goal_HOAS.in_elpi_arg) in
+  let query = Fun (Coq_elpi_HOAS.goal2query env ~main:query sigma k loc args ~in_elpi_arg:Coq_elpi_goal_HOAS.in_elpi_arg) in
   let program_ast = get program in
   match run ~tactic_mode:true ~static_check:true program_ast query with
   | API.Execute.Success solution ->
