@@ -508,3 +508,136 @@ parse-attributes.aux [attribute S (leaf V)|AS] Prefix CLS :- !,
   if (Diag = error Msg) (coq.error Msg) true,
   if (V1 = some Val) (CLS = [get-option PS Val|R]) (CLS = R), % ignored
   parse-attributes.aux AS Prefix R.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Coq document
+
+% This is a very minimalistic AST to represent a Coq document equipped with
+% pretty printing facilities.
+
+kind coq.vernac type.
+type coq.vernac.begin-module string -> option string -> coq.vernac.
+type coq.vernac.end-module string -> coq.vernac.
+type coq.vernac.import-module string -> coq.vernac.
+type coq.vernac.export-module string -> coq.vernac.
+type coq.vernac.definition string -> option term -> term -> coq.vernac.
+type coq.vernac.inductive indt-decl -> coq.vernac.
+type coq.vernac.abbreviation string -> int -> term -> coq.vernac.
+type coq.vernac.coercion string -> gref -> class -> coq.vernac.
+type coq.vernac.canonical string -> coq.vernac.
+
+{
+shorten coq.vernac.{ begin-module , end-module , definition , canonical , abbreviation , coercion , import-module , export-module }.
+shorten coq.{ vernac.inductive }.
+shorten coq.pp.{ box , h , spc , v , str , hv , hov, glue, brk }.
+
+pred coq.vernac->pp i:list coq.vernac, o:coq.pp.
+coq.vernac->pp L (box (v 0) L2) :-
+  std.map L coq.vernac->pp1 L1,
+  coq.vernac->ppsp L1 L2.
+
+pred coq.vernac->ppsp i:list coq.pp, o:list coq.pp.
+coq.vernac->ppsp [] [].
+coq.vernac->ppsp [X|XS] [X,spc|YS] :- coq.vernac->ppsp XS YS.
+
+% TODO: move to elpi proper
+pred if2 i:prop, i:prop, i:prop, i:prop, i:prop.
+if2 G1 P1 _  _  _ :- G1, !, P1.
+if2 _  _  G2 P2 _ :- G2, !, P2.
+if2 _  _  _  _  E :- !, E.
+
+pred coq.vernac->pp1 i:coq.vernac, o:coq.pp.
+coq.vernac->pp1 (begin-module Name none) (box h [str "Module ", str Name, str "."]).
+coq.vernac->pp1 (begin-module Name (some TyName)) (box h [str "Module ", str Name, str " : ", str TyName, str "."]).
+coq.vernac->pp1 (end-module Name) (box h [str "End ", str Name, str "."]).
+coq.vernac->pp1 (definition Name none Body) (box (hv 2) [box h [str "Definition ", str Name, str " :="], spc, B, str "."]) :-
+  @ppall! => coq.term->pp Body B.
+coq.vernac->pp1 (definition Name (some Ty) Body) (box (hv 0) [box (hv 2) [box h [str "Definition ", str Name, str" :"], spc, T], spc, (box (hv 2) [str ":=", spc, B, str "."])]) :-
+  @ppall! => coq.term->pp Ty T,
+  @ppall! => coq.term->pp Body B.
+coq.vernac->pp1 (import-module Name) (box h [str "Import ", str Name, str "."]).
+coq.vernac->pp1 (export-module Name) (box h [str "Export ", str Name, str "."]).
+coq.vernac->pp1 (abbreviation Name NParams Term) (box (hv 2) [box h [str "Notation ",str Name|StrParams], str " :=", spc, B, str "."]) :-
+  coq.vernac->ppabbrterm NParams Term StrParams B.
+coq.vernac->pp1 (canonical Name) (box h [str "Canonical ", str Name, str "."]).
+coq.vernac->pp1 (coercion Name SRC TGT) (box h [str "Coercion ", str Name, str " : ", str S, str " >-> ", str T, str "."]) :-
+  coq.gref->id SRC S,
+  if2 (TGT = sortclass) (T = "Sortclass")
+      (TGT = funclass)  (T = "Funclass")
+                        (TGT = grefclass GR, coq.gref->id GR T).
+coq.vernac->pp1 (vernac.inductive I) PP :-
+  coq.vernac->ppinductive I [] PP.
+
+pred coq.vernac->ppinductive i:indt-decl, i:list (pair implicit_kind term), o:coq.pp.
+coq.vernac->ppinductive (parameter ID IMPL TY I) Acc R :-
+  @pi-parameter ID TY p\ coq.vernac->ppinductive (I p) [pr IMPL p|Acc] R.
+coq.vernac->ppinductive (record ID SORT KID RD) ParamsRev PP :-
+  PP = (box (hov 0) [
+         box (hov 0) [str "Record", spc, str ID, brk 1 4, glue ParamsPP,
+                      str ": ", SortPP, brk 1 2, str":= ", str KID],
+         brk 1 2,
+         box (hv 2) [str"{", glue FieldsPP, str"}"],
+         str"."]),
+  std.rev ParamsRev Params,
+  coq.vernac->ppinductiveparams Params ParamsPP,
+  @ppall! => coq.term->pp SORT SortPP,
+  coq.vernac->pprecordfields RD FieldsPP.
+coq.vernac->ppinductive (inductive ID IsInd Arity Ks) ParamsRev PP :-
+  PP = (box (hov 0) [
+         str CO,str "Inductive", spc,
+         box (hov 0) [
+           str ID, brk 1 4, glue ParamsPP, ArityPP, str " :="],
+         brk 0 2,
+         box (hv 2) [str"  ", glue KsPp],
+         str "."]),
+  std.rev ParamsRev Params,
+  coq.vernac->ppinductiveparams Params ParamsPP,
+  std.map Params snd ParamsAsArgs,
+  if (IsInd = tt) (CO = "") (CO = "Co"),
+  coq.arity->pp Arity ArityPP,
+  @pi-inductive ID Arity x\
+    coq.mk-app x ParamsAsArgs (X x),
+    coq.vernac->ppinductiveconstructor (Ks (X x)) KsPp.
+
+pred coq.vernac->ppinductiveconstructor i:list indc-decl, o:list coq.pp.
+coq.vernac->ppinductiveconstructor [] [].
+coq.vernac->ppinductiveconstructor [constructor ID Arity|Ks] PP :-
+  PP = [str ID,{coq.arity->pp Arity},SEP|Rest],
+  if (Ks = []) (SEP = str"") (SEP = glue [brk 1 0, str "| "]),
+  coq.vernac->ppinductiveconstructor Ks Rest.
+
+pred coq.vernac->ppinductiveparams i:list (pair implicit_kind term), o:list coq.pp.
+coq.vernac->ppinductiveparams [] [].
+coq.vernac->ppinductiveparams [pr Imp T|Rest] PP :-
+  PP = [box (hov 2) [str A,str ID,str " : ", TY,str B]|PPRest],
+  decl T Name Ty, coq.name->id Name ID, @ppall! => coq.term->pp Ty TY,
+  if2 (Imp = explicit) (A = "(", B = ")")
+      (Imp = maximal)  (A = "{", B = "}")
+                       (A = "[", B = "]"),
+  coq.vernac->ppinductiveparams Rest PPRest.
+
+pred coq.vernac->pprecordfields i:record-decl, o:list coq.pp. 
+coq.vernac->pprecordfields end-record [].
+coq.vernac->pprecordfields (field _ ID TY F) [ str ID, str " : ", TYPP, str ";", brk 2 0|FPP] :- % TODO attributes
+  @ppall! => coq.term->pp TY TYPP,
+  @pi-parameter ID TY p\ coq.vernac->pprecordfields (F p) FPP.
+
+pred coq.vernac->ppabbrterm i:int, i:term, o:list coq.pp, o:coq.pp.
+coq.vernac->ppabbrterm 0 T [] B :- !, @ppall! => @holes! => coq.term->pp T B.
+coq.vernac->ppabbrterm N (fun _ _ F) [spc,str ID|StrParams] B :-
+  ID is "X" ^ {std.any->string N},
+  coq.id->name ID Name,
+  M is N - 1,
+  @pi-decl Name (sort prop) x\ coq.vernac->ppabbrterm M (F x) StrParams B.
+
+pred coq.arity->pp o:arity, o:coq.pp.
+coq.arity->pp (parameter ID Imp T Arity) (glue [box (hv 2) [str A, str ID, str " :", spc,TPP,str B], spc, Rest]) :-
+  if2 (Imp = explicit) (A = "(", B = ")")
+      (Imp = maximal)  (A = "{", B = "}")
+                       (A = "[", B = "]"),
+  coq.term->pp T TPP,                       
+  @pi-parameter ID T x\ coq.arity->pp (Arity x) Rest.
+coq.arity->pp (arity T) (glue [str" : ",TPP]) :- coq.term->pp T TPP.
+
+}

@@ -772,3 +772,34 @@ main _ :-
 }}.
 Elpi Typecheck.
 Elpi test.pp.
+
+Notation foo x := (fun y => x + y).
+
+Record bar A := mkb { f1 : A; f2 : nat -> bool; }.
+
+Elpi Command test.pp1.
+Elpi Accumulate lp:{{
+main _ :-
+  coq.locate "plus" (const GR),
+  coq.locate "nat" Nat,
+  coq.locate "list" (indt List),
+  coq.locate "bar" (indt Bar),
+  coq.env.indt-decl List ListD,
+  coq.env.indt-decl Bar BarD,
+  coq.env.const GR (some BO) TY,
+  coq.locate-abbreviation "foo" Abb,
+  coq.notation.abbreviation-body Abb 1 A,
+  coq.vernac->pp [
+    coq.vernac.begin-module "Foo" none,
+    coq.vernac.definition "add" (some TY) BO,
+    coq.vernac.abbreviation "foo" 1 A,
+    coq.vernac.coercion "c" Nat funclass,
+    coq.vernac.inductive ListD,
+    coq.vernac.inductive BarD,
+    coq.vernac.end-module "Foo",
+  ] PP,
+  @ppwidth! 30 => coq.say {coq.pp->string PP},
+  @ppwidth! 80 => coq.say {coq.pp->string PP}.
+}}.
+Elpi Typecheck.
+Elpi test.pp1.
