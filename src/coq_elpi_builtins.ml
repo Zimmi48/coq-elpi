@@ -520,7 +520,7 @@ let attribute_value = let open API.AlgebraicData in let open Attributes in let o
 
 let attribute = attribute attribute_value
 
-let warning = CWarnings.create ~name:"lib" ~category:"elpi" Pp.str
+let warning = CWarnings.(create ~name:"lib" ~category:(Other "elpi")) Pp.str
 
 let if_keep x f =
   match x with
